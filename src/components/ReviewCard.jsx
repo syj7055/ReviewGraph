@@ -77,7 +77,7 @@ function ReviewCard({ review, variant = "A", onClick, selected }) {
             scoreBadgeClass(review.helpfulnessScore)
           )}
         >
-          AI 유용성 점수 {review.helpfulnessScore}
+          유용성 점수 {review.helpfulnessScore}
         </div>
       )}
 

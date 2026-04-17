@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 
-function LoadingScene() {
+function LoadingScene({ message = "리뷰 큐레이션을 준비하고 있습니다" }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -14,7 +14,7 @@ function LoadingScene() {
           transition={{ duration: 1.4, repeat: Number.POSITIVE_INFINITY }}
           className="h-2.5 w-2.5 rounded-full bg-orange-500"
         />
-        <p className="text-sm font-medium text-slate-600">AI가 리뷰 데이터를 수집 중입니다</p>
+        <p className="text-sm font-medium text-slate-600">{message}</p>
       </div>
 
       <div className="space-y-4">

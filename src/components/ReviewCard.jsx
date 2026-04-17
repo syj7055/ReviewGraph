@@ -59,21 +59,24 @@ const renderHighlightedText = (text, highlights = []) => {
 };
 
 function ReviewCard({ review, variant = "A", onClick, selected }) {
+  const compactTags = review.visitTags.slice(0, 6);
+  const restTagCount = Math.max(0, review.visitTags.length - compactTags.length);
+
   return (
     <motion.article
       layout
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 220, damping: 20 }}
+      whileHover={{ y: -5, scale: 1.002 }}
+      transition={{ type: "spring", stiffness: 220, damping: 22 }}
       className={clsx(
-        "glass-card relative cursor-pointer rounded-3xl p-5 sm:p-6",
-        selected && "ring-2 ring-orange-300"
+        "glass-card relative cursor-pointer rounded-3xl border border-white/80 p-5 transition-shadow duration-300 hover:shadow-soft sm:p-6",
+        selected && "ring-2 ring-orange-300 shadow-soft"
       )}
       onClick={onClick}
     >
       {variant === "B" && (
         <div
           className={clsx(
-            "score-badge absolute right-4 top-4 rounded-full px-3 py-1 text-xs font-semibold",
+            "score-badge absolute right-4 top-4 rounded-full px-3 py-1 text-[11px] font-semibold",
             scoreBadgeClass(review.helpfulnessScore)
           )}
         >
@@ -81,38 +84,43 @@ function ReviewCard({ review, variant = "A", onClick, selected }) {
         </div>
       )}
 
-      <div className="mb-4 flex items-start justify-between gap-2 pr-28 sm:pr-32">
+      <div className="mb-4 flex items-start justify-between gap-3 pr-28 sm:pr-32">
         <div className="flex items-center gap-3">
           <div
-            className="grid h-10 w-10 place-items-center rounded-xl text-sm font-semibold text-white"
+            className="grid h-11 w-11 place-items-center rounded-2xl text-sm font-semibold text-white shadow-sm"
             style={{ background: review.avatarColor }}
           >
             {review.author.slice(0, 1)}
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">{review.author}</p>
-            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+            <p className="text-[15px] font-semibold tracking-tight text-slate-900">{review.author}</p>
+            <div className="mt-1 flex items-center gap-2 text-[12px] text-slate-500">
               <CalendarDays size={13} />
               <span>{review.date}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold text-amber-700">
+        <div className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
           <Star size={13} className="fill-amber-400 text-amber-400" />
           {review.rating}
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {review.visitTags.map((tag) => (
-          <span key={tag} className="rounded-full bg-slate-100/80 px-2.5 py-1 text-xs font-medium text-slate-600">
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {compactTags.map((tag) => (
+          <span key={tag} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
             {tag}
           </span>
         ))}
+        {restTagCount > 0 && (
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
+            +{restTagCount}
+          </span>
+        )}
       </div>
 
-      <p className="leading-relaxed text-slate-700">
+      <p className="text-[15px] leading-7 text-slate-700">
         {variant === "B" ? renderHighlightedText(review.text, review.sharedSentences) : review.text}
       </p>
     </motion.article>

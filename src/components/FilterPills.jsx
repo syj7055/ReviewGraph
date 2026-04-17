@@ -3,16 +3,16 @@ import clsx from "clsx";
 
 function FilterPills({ filters, selectedFilters, onToggleFilter }) {
   return (
-    <div className="glass-card rounded-3xl p-4 soft-shadow sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="glass-card rounded-3xl p-4 soft-shadow sm:p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Smart Filters</p>
-          <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">방문 목적 및 편의시설 필터</h2>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">Preference Setup</p>
+          <h2 className="text-lg font-semibold tracking-tight text-slate-900">방문 목적 키워드</h2>
         </div>
-        <p className="text-sm text-slate-500">필터 변경 시 추천 리뷰를 다시 정렬합니다.</p>
+        <p className="text-xs text-slate-500">일치 리뷰 우선 · 비일치 리뷰 후순위 노출</p>
       </div>
 
-      <div className="pill-scroll flex gap-2 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-1.5">
         {filters.map((filter) => {
           const selected = selectedFilters.includes(filter);
           return (
@@ -23,10 +23,10 @@ function FilterPills({ filters, selectedFilters, onToggleFilter }) {
               type="button"
               onClick={() => onToggleFilter(filter)}
               className={clsx(
-                "shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-250",
+                "rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-250",
                 selected
-                  ? "border-orange-300 bg-orange-50 text-orange-900"
-                  : "border-white/70 bg-white/50 text-slate-600 hover:border-orange-200 hover:bg-white/80"
+                  ? "border-orange-300 bg-orange-50 text-orange-900 shadow-soft"
+                  : "border-white/70 bg-white/50 text-slate-600 hover:border-orange-200 hover:bg-white/90"
               )}
             >
               {filter}

@@ -44,7 +44,7 @@ function SurveyModal({ value, onChange, onSubmit, onCancel }) {
           </div>
 
           <div>
-            <p className="mb-3 text-sm font-medium text-slate-800">최종 선택한 식당에 방문할 의향은 몇 퍼센트인가요?</p>
+            <p className="mb-3 text-sm font-medium text-slate-800">최종 선택한 Place에 방문할 의향은 몇 퍼센트인가요?</p>
             <input
               type="range"
               min="0"

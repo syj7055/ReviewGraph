@@ -1,266 +1,345 @@
-const PURPOSE_OPTIONS = ["가족모임", "데이트", "혼밥", "회식", "친구모임", "조용한"];
-const FACILITY_OPTIONS = ["주차가능", "예약가능", "아기의자", "룸식당", "늦은영업", "테라스석"];
+import reviewsCsvRaw from "../../resources/reviews_preprocessed.csv?raw";
 
-const KEYWORD_POOL = [
-  "가성비",
-  "재방문",
-  "서비스",
-  "회전율",
-  "분위기",
-  "청결",
-  "웨이팅",
-  "신선도",
-  "주차",
-  "좌석간격",
-  "혼밥친화",
-  "단체석",
-  "디저트",
-  "시그니처",
-  "음악볼륨",
-  "양",
-  "친절",
-  "구성",
-  "매운맛",
-  "포장",
-  "국물맛",
-  "가격안정",
-  "방문동선",
-  "재료관리",
-];
+const CHILD_FRIENDLY_TAG = "child_friendly";
+const SOLO_DINING_TAG = "solo_dining";
 
-const SHARED_SENTENCE_POOL = [
-  "직원 응대가 빠르고 정확해서 주문 과정이 매끄러웠어요.",
-  "대표 메뉴의 간이 과하지 않아 끝까지 편하게 먹을 수 있었어요.",
-  "좌석 간격이 넓어서 대화하기에 부담이 없었습니다.",
-  "주차 동선이 단순해서 가족 단위 방문에 편리했어요.",
-  "피크 타임에도 음식 온도가 안정적으로 유지됐습니다.",
-  "혼자 방문해도 시선 부담이 없고 회전이 빨라요.",
-  "재료 신선도가 좋다는 인상을 공통적으로 받았습니다.",
-  "웨이팅이 있었지만 안내가 체계적이라 체감이 짧았어요.",
-  "매장이 조용한 편이라 업무 대화나 미팅에 적합했습니다.",
-  "가격 대비 양이 충분해서 재방문 의사가 높아졌습니다.",
-  "테이블 간 간격이 넓어 유아 동반 고객도 편했습니다.",
-  "한 메뉴만 강한 가게가 아니라 전반적인 밸런스가 좋았어요.",
-];
+const AVATAR_COLORS = ["#f97316", "#0ea5e9", "#22c55e", "#f43f5e", "#f59e0b", "#14b8a6", "#6366f1", "#8b5cf6"];
 
-const AUTHOR_POOL = [
-  "김하윤",
-  "이서준",
-  "박지민",
-  "최윤서",
-  "정도윤",
-  "한지우",
-  "오민재",
-  "윤하린",
-  "송예준",
-  "배서아",
-  "문도현",
-  "장유진",
-  "홍다인",
-  "권태윤",
-  "임유나",
-  "서동현",
-];
+const normalizeWhitespace = (value) =>
+  String(value || "")
+    .replace(/\r/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-const AVATAR_COLORS = ["#fb923c", "#22c55e", "#38bdf8", "#f43f5e", "#f59e0b", "#14b8a6", "#6366f1"];
-
-const MOCK_RESTAURANTS = [
-  {
-    id: "rest-1",
-    name: "온유식당",
-    category: "한식",
-    district: "성북구 안암동",
-    priceBand: "1.2~1.8만원",
-    rating: 4.5,
-    tags: ["가족모임", "주차가능", "룸식당"],
-    signature: "한우 들기름 비빔밥",
-  },
-  {
-    id: "rest-2",
-    name: "미로스시랩",
-    category: "일식",
-    district: "종로구 혜화동",
-    priceBand: "1.5~2.4만원",
-    rating: 4.6,
-    tags: ["데이트", "예약가능", "조용한"],
-    signature: "숙성 참치 후토마키",
-  },
-  {
-    id: "rest-3",
-    name: "브라이트타코",
-    category: "멕시칸",
-    district: "마포구 연남동",
-    priceBand: "1.1~1.9만원",
-    rating: 4.4,
-    tags: ["친구모임", "테라스석", "늦은영업"],
-    signature: "스파이시 칠리 타코",
-  },
-  {
-    id: "rest-4",
-    name: "라운드테이블 파스타",
-    category: "양식",
-    district: "성동구 성수동",
-    priceBand: "1.7~2.8만원",
-    rating: 4.7,
-    tags: ["데이트", "예약가능", "주차가능"],
-    signature: "트러플 머쉬룸 파스타",
-  },
-  {
-    id: "rest-5",
-    name: "장작솥밥집",
-    category: "한식",
-    district: "강남구 역삼동",
-    priceBand: "1.4~2.1만원",
-    rating: 4.3,
-    tags: ["회식", "주차가능", "단체석"],
-    signature: "전복 장작솥밥",
-  },
-  {
-    id: "rest-6",
-    name: "스몰그린키친",
-    category: "비건",
-    district: "용산구 한남동",
-    priceBand: "1.3~2.0만원",
-    rating: 4.5,
-    tags: ["혼밥", "조용한", "포장가능"],
-    signature: "두부 스테이크 플레이트",
-  },
-  {
-    id: "rest-7",
-    name: "바다연구소",
-    category: "해산물",
-    district: "송파구 석촌동",
-    priceBand: "1.8~3.1만원",
-    rating: 4.6,
-    tags: ["가족모임", "주차가능", "예약가능"],
-    signature: "제철 모둠사시미",
-  },
-];
-
-const FILTER_PILLS = [
-  "가족모임",
-  "주차가능",
-  "혼밥",
-  "조용한",
-  "데이트",
-  "친구모임",
-  "회식",
-  "예약가능",
-  "아기의자",
-  "룸식당",
-  "테라스석",
-  "늦은영업",
-];
-
-const seeded = (seed) => {
-  const x = Math.sin(seed * 137.2) * 43758.5453;
-  return x - Math.floor(x);
-};
-
-const pickSeveral = (arr, count, seedBase) => {
-  const picked = new Set();
-  let cursor = 0;
-
-  while (picked.size < count && cursor < arr.length * 4) {
-    const idx = Math.floor(seeded(seedBase + cursor) * arr.length);
-    picked.add(arr[idx]);
-    cursor += 1;
+const splitTagList = (value) => {
+  if (!value) {
+    return [];
   }
 
-  return Array.from(picked);
+  return Array.from(
+    new Set(
+      String(value)
+        .split(/[|,]/)
+        .map((item) => normalizeWhitespace(item))
+        .filter(Boolean)
+    )
+  );
 };
 
-const makeReviewText = ({ restaurantName, signature, sharedSentence, purpose, keywords }) => {
-  const intro = `${restaurantName} 방문 목적은 ${purpose}이었고, 특히 ${signature} 기준으로 평가했습니다.`;
-  const body = `핵심 판단 포인트는 ${keywords[0]}, ${keywords[1]}, ${keywords[2]}였습니다.`;
-  const outro = "실제 방문 결정을 앞둔 사용자에게 실질적인 기준을 제공하는 리뷰라고 생각합니다.";
-  return `${intro} ${sharedSentence} ${body} ${outro}`;
+const parseNumber = (value, fallback = 0) => {
+  const normalized = String(value || "")
+    .replace(/[^0-9.-]/g, "")
+    .trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const createReview = (restaurant, restaurantIndex, reviewIndex) => {
-  const globalIndex = restaurantIndex * 20 + reviewIndex;
-  const id = `${restaurant.id}-review-${reviewIndex + 1}`;
-  const purpose = PURPOSE_OPTIONS[(reviewIndex + restaurantIndex) % PURPOSE_OPTIONS.length];
-  const facilities = pickSeveral(FACILITY_OPTIONS, 2, 300 + globalIndex);
-  const keywords = pickSeveral(KEYWORD_POOL, 5, 600 + globalIndex);
-  const sharedSentence = SHARED_SENTENCE_POOL[(reviewIndex + restaurantIndex) % SHARED_SENTENCE_POOL.length];
-  const rating = Number((3.8 + seeded(1000 + globalIndex) * 1.2).toFixed(1));
-  const helpfulnessScore = Math.round(61 + seeded(1200 + globalIndex) * 38);
-  const centrality = Number((0.28 + seeded(1400 + globalIndex) * 0.72).toFixed(2));
-  const author = AUTHOR_POOL[globalIndex % AUTHOR_POOL.length];
-  const avatarColor = AVATAR_COLORS[globalIndex % AVATAR_COLORS.length];
-  const day = ((globalIndex * 3) % 27) + 1;
-  const month = (globalIndex % 4) + 1;
-  const visitTags = Array.from(new Set([purpose, ...facilities, ...restaurant.tags]));
+const parseBinary = (value) => parseNumber(value, 0) === 1;
 
-  return {
-    id,
-    restaurantId: restaurant.id,
-    restaurantName: restaurant.name,
-    author,
-    avatarColor,
-    rating,
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const hashText = (text) => {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash << 5) - hash + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const pickAvatarColor = (name) => AVATAR_COLORS[hashText(name) % AVATAR_COLORS.length];
+
+const removeBranchSuffix = (name) =>
+  normalizeWhitespace(name)
+    .replace(/\s*울산구영점$/u, "")
+    .replace(/\s*구영점$/u, "")
+    .replace(/\s*본점$/u, "")
+    .trim();
+
+const inferCategory = (name) => {
+  if (/커피|카페|투썸/u.test(name)) return "카페";
+  if (/스시|초밥/u.test(name)) return "스시";
+  if (/장어/u.test(name)) return "장어";
+  if (/국밥|칼국수/u.test(name)) return "한식";
+  if (/빵|베이커리|랑콩/u.test(name)) return "베이커리";
+  if (/버터|당몽/u.test(name)) return "디저트";
+  if (/고기|비프/u.test(name)) return "고기";
+  return "다이닝";
+};
+
+const SIGNATURE_BY_CATEGORY = {
+  "카페": "시그니처 라떼",
+  "스시": "숙성 모둠초밥",
+  "장어": "숯불 장어 정식",
+  "한식": "시그니처 한상",
+  "베이커리": "버터 크루아상",
+  "디저트": "크림 디저트",
+  "고기": "숙성 고기 세트",
+  "다이닝": "셰프 스페셜",
+};
+
+const extractSharedSentence = (text) => {
+  const rawParts = String(text || "")
+    .split(/[.!?\n]/)
+    .map((part) => normalizeWhitespace(part))
+    .filter((part) => part.length >= 12);
+  return rawParts[0] ? `${rawParts[0]}.` : "";
+};
+
+const parseCsv = (csvText) => {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  const text = String(csvText || "").replace(/^\uFEFF/, "");
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") {
+        i += 1;
+      }
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+
+    field += char;
+  }
+
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
+};
+
+const tableRows = parseCsv(reviewsCsvRaw);
+const header = tableRows[0] || [];
+
+const records = tableRows
+  .slice(1)
+  .filter((row) => row.some((cell) => normalizeWhitespace(cell).length > 0))
+  .map((row) => {
+    const mapped = {};
+    header.forEach((key, idx) => {
+      mapped[key] = row[idx] || "";
+    });
+    return mapped;
+  })
+  .filter((record) => normalizeWhitespace(record.place_id) && normalizeWhitespace(record.review_text));
+
+const purposeFrequency = new Map();
+const placeBucket = new Map();
+const reviewRows = [];
+
+records.forEach((record, idx) => {
+  const placeId = normalizeWhitespace(record.place_id) || `place-${idx + 1}`;
+  const rawPlaceName = normalizeWhitespace(record.place_name) || `Place ${idx + 1}`;
+  const placeName = removeBranchSuffix(rawPlaceName);
+  const purposeTags = splitTagList(record["방문 목적"]);
+  const keywordTags = splitTagList(record.keywords);
+  const childFriendly = parseBinary(record.child_friendly);
+  const soloDining = parseBinary(record.solo_dining);
+
+  purposeTags.forEach((purpose) => {
+    purposeFrequency.set(purpose, (purposeFrequency.get(purpose) || 0) + 1);
+  });
+
+  const visitTags = Array.from(
+    new Set([
+      ...purposeTags,
+      ...(childFriendly ? [CHILD_FRIENDLY_TAG] : []),
+      ...(soloDining ? [SOLO_DINING_TAG] : []),
+    ])
+  );
+
+  const rating = clamp(parseNumber(record.rating, 4.3), 1, 5);
+  const helpfulCount = Math.max(0, parseNumber(record.helpful_count, 0));
+  const reviewText = normalizeWhitespace(record.review_text);
+  const scoreRaw = 56 + helpfulCount * 4 + rating * 8 + Math.min(24, reviewText.length / 30) + keywordTags.length * 0.7;
+  const helpfulnessScore = clamp(Math.round(scoreRaw), 55, 98);
+
+  const reviewRow = {
+    id: `${placeId}-review-${idx + 1}`,
+    placeId,
+    placeName,
+    author: normalizeWhitespace(record.user_name) || "익명 사용자",
+    avatarColor: pickAvatarColor(normalizeWhitespace(record.user_name) || `user-${idx}`),
+    rating: Number(rating.toFixed(1)),
     helpfulnessScore,
-    centrality,
-    date: `2026.${String(month).padStart(2, "0")}.${String(day).padStart(2, "0")}`,
+    centrality: Number((0.22 + helpfulnessScore / 130).toFixed(2)),
+    date: normalizeWhitespace(record.created_at),
     visitTags,
-    purpose,
-    facilities,
-    keywords,
-    sharedSentences: [sharedSentence],
-    text: makeReviewText({
-      restaurantName: restaurant.name,
-      signature: restaurant.signature,
-      sharedSentence,
-      purpose,
-      keywords,
-    }),
+    purpose: purposeTags[0] || "일상",
+    facilities: [
+      ...(childFriendly ? [CHILD_FRIENDLY_TAG] : []),
+      ...(soloDining ? [SOLO_DINING_TAG] : []),
+    ],
+    keywords: keywordTags.length ? keywordTags : splitTagList(record.visit_info),
+    sharedSentences: [extractSharedSentence(reviewText)].filter(Boolean),
+    text: reviewText,
   };
-};
+
+  reviewRows.push(reviewRow);
+
+  if (!placeBucket.has(placeId)) {
+    placeBucket.set(placeId, {
+      id: placeId,
+      rawName: rawPlaceName,
+      name: placeName,
+      rows: [],
+      ratings: [],
+      tags: new Map(),
+      keywordFreq: new Map(),
+    });
+  }
+
+  const bucket = placeBucket.get(placeId);
+  bucket.rows.push(reviewRow);
+  bucket.ratings.push(reviewRow.rating);
+
+  reviewRow.visitTags.forEach((tag) => {
+    bucket.tags.set(tag, (bucket.tags.get(tag) || 0) + 1);
+  });
+
+  reviewRow.keywords.forEach((keyword) => {
+    bucket.keywordFreq.set(keyword, (bucket.keywordFreq.get(keyword) || 0) + 1);
+  });
+});
+
+const FILTER_PILLS = [
+  ...Array.from(purposeFrequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([purpose]) => purpose),
+  CHILD_FRIENDLY_TAG,
+  SOLO_DINING_TAG,
+];
+
+const MOCK_PLACES = Array.from(placeBucket.values())
+  .map((bucket) => {
+    const avgRating =
+      bucket.ratings.length > 0 ? bucket.ratings.reduce((sum, value) => sum + value, 0) / bucket.ratings.length : 4.3;
+    const tagTop = Array.from(bucket.tags.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([tag]) => tag);
+    const signature = Array.from(bucket.keywordFreq.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([keyword]) => keyword)[0];
+
+    const category = inferCategory(bucket.name);
+
+    return {
+      id: bucket.id,
+      name: bucket.name,
+      category,
+      district: "울산 울주군 구영리",
+      priceBand: "방문자 리뷰 기반",
+      rating: Number(avgRating.toFixed(1)),
+      tags: tagTop,
+      signature: signature || SIGNATURE_BY_CATEGORY[category] || "리뷰 인기 메뉴",
+    };
+  })
+  .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+
+const placeOrderMap = new Map(MOCK_PLACES.map((place, idx) => [place.id, idx]));
+
+const MOCK_REVIEWS = reviewRows.sort((a, b) => {
+  const placeOrderGap = (placeOrderMap.get(a.placeId) || 0) - (placeOrderMap.get(b.placeId) || 0);
+  if (placeOrderGap !== 0) {
+    return placeOrderGap;
+  }
+  return b.helpfulnessScore - a.helpfulnessScore;
+});
 
 const buildGraphData = (reviews) => {
   const links = [];
+  const nodeMap = new Map(
+    reviews.map((review) => [
+      review.id,
+      {
+        id: review.id,
+        label: review.author,
+        helpfulnessScore: review.helpfulnessScore,
+        centrality: review.centrality,
+        purpose: review.purpose,
+      },
+    ])
+  );
+
+  const keywordSetById = new Map(reviews.map((review) => [review.id, new Set(review.keywords)]));
 
   for (let i = 0; i < reviews.length; i += 1) {
     for (let j = i + 1; j < reviews.length; j += 1) {
       const source = reviews[i];
       const target = reviews[j];
-      const overlapCount = source.keywords.filter((keyword) => target.keywords.includes(keyword)).length;
-      const samePurpose = source.purpose === target.purpose;
-      const deterministicPick = seeded((i + 4) * (j + 9));
 
-      if (overlapCount >= 2 || (samePurpose && deterministicPick > 0.52)) {
+      const sourceSet = keywordSetById.get(source.id);
+      const targetSet = keywordSetById.get(target.id);
+      let overlapCount = 0;
+
+      sourceSet.forEach((keyword) => {
+        if (targetSet.has(keyword)) {
+          overlapCount += 1;
+        }
+      });
+
+      const samePurpose = source.purpose === target.purpose;
+      if (overlapCount >= 1 || (samePurpose && (i + j) % 3 === 0)) {
         links.push({
           source: source.id,
           target: target.id,
           overlapCount,
-          weight: Number((1 + overlapCount * 0.35 + (samePurpose ? 0.3 : 0)).toFixed(2)),
+          weight: Number((1 + overlapCount * 0.45 + (samePurpose ? 0.3 : 0)).toFixed(2)),
           reason: samePurpose ? "방문 목적 유사" : "공통 키워드 유사",
         });
       }
     }
   }
 
-  const nodes = reviews.map((review) => ({
-    id: review.id,
-    label: review.author,
-    helpfulnessScore: review.helpfulnessScore,
-    centrality: review.centrality,
-    purpose: review.purpose,
-  }));
+  const degree = new Map();
+  links.forEach((link) => {
+    degree.set(link.source, (degree.get(link.source) || 0) + 1);
+    degree.set(link.target, (degree.get(link.target) || 0) + 1);
+  });
 
-  return { nodes, links };
+  const maxDegree = Math.max(1, ...Array.from(degree.values()));
+
+  nodeMap.forEach((node) => {
+    const degreeRatio = (degree.get(node.id) || 0) / maxDegree;
+    node.centrality = Number((0.25 + degreeRatio * 0.5 + node.helpfulnessScore / 300).toFixed(2));
+  });
+
+  return { nodes: Array.from(nodeMap.values()), links };
 };
 
-const MOCK_REVIEWS = MOCK_RESTAURANTS.flatMap((restaurant, restaurantIndex) =>
-  Array.from({ length: 12 }, (_, reviewIndex) => createReview(restaurant, restaurantIndex, reviewIndex))
-);
-
-const MOCK_GRAPH_BY_RESTAURANT = Object.fromEntries(
-  MOCK_RESTAURANTS.map((restaurant) => {
-    const restaurantReviews = MOCK_REVIEWS.filter((review) => review.restaurantId === restaurant.id);
-    return [restaurant.id, buildGraphData(restaurantReviews)];
+const MOCK_GRAPH_BY_PLACE = Object.fromEntries(
+  MOCK_PLACES.map((place) => {
+    const placeReviews = MOCK_REVIEWS.filter((review) => review.placeId === place.id);
+    return [place.id, buildGraphData(placeReviews)];
   })
 );
 
-export { FILTER_PILLS, MOCK_RESTAURANTS, MOCK_REVIEWS, MOCK_GRAPH_BY_RESTAURANT };
+export { FILTER_PILLS, MOCK_PLACES, MOCK_REVIEWS, MOCK_GRAPH_BY_PLACE };

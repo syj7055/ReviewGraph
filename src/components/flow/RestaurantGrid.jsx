@@ -1,60 +1,65 @@
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import { MapPin, Utensils } from "lucide-react";
+import { MapPin, UtensilsCrossed } from "lucide-react";
 
-function RestaurantGrid({ restaurants, selectedRestaurantId, selectedFilters, onSelectRestaurant, reviewCountMap }) {
+function RestaurantGrid({ places, selectedPlaceId, selectedPreferences, onSelectPlace, reviewCountMap }) {
   return (
-    <section className="space-y-3">
+    <section className="glass-card rounded-3xl p-4 soft-shadow sm:p-5">
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">Restaurant List</p>
-          <h2 className="text-2xl font-semibold text-slate-900">식당 선택</h2>
+          <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">Place Selector</p>
+          <h2 className="text-lg font-semibold text-slate-900">Place 선택</h2>
         </div>
-        <p className="text-sm text-slate-500">
-          필터 {selectedFilters.length}개 적용
-        </p>
+        <p className="text-xs text-slate-500">선호 {selectedPreferences.length}개</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {restaurants.map((restaurant) => {
-          const isSelected = restaurant.id === selectedRestaurantId;
-          const visibleReviews = reviewCountMap[restaurant.id] || 0;
+      <div className="mt-3 space-y-2.5 overflow-y-auto pr-1 lg:max-h-[56vh]">
+        {places.map((place) => {
+          const isSelected = place.id === selectedPlaceId;
+          const visibleReviews = reviewCountMap[place.id] || { ranked: 0, total: 0 };
           return (
             <motion.button
-              key={restaurant.id}
+              key={place.id}
               type="button"
               whileHover={{ y: -3 }}
               whileTap={{ scale: 0.99 }}
-              onClick={() => onSelectRestaurant(restaurant.id)}
+              onClick={() => onSelectPlace(place.id)}
               className={clsx(
-                "glass-card rounded-3xl p-4 text-left transition-colors",
-                isSelected ? "border-orange-300 ring-2 ring-orange-200" : "hover:border-orange-200"
+                "glass-panel w-full rounded-2xl p-3 text-left transition-all duration-250",
+                isSelected
+                  ? "border-orange-300 ring-2 ring-orange-200 shadow-soft"
+                  : "hover:border-orange-200 hover:bg-white/95"
               )}
             >
-              <p className="mb-2 inline-flex rounded-full bg-slate-100/80 px-2 py-1 text-xs font-semibold text-slate-600">
-                {restaurant.category}
-              </p>
-              <h3 className="text-lg font-semibold text-slate-900">{restaurant.name}</h3>
-              <p className="mt-1 inline-flex items-center gap-1 text-sm text-slate-600">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="inline-flex rounded-full bg-slate-100/90 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                  {place.category}
+                </p>
+                <p className="text-[11px] font-semibold text-slate-500">{visibleReviews.ranked}/{visibleReviews.total} 리뷰</p>
+              </div>
+
+              <h3 className="text-base font-semibold tracking-tight text-slate-900">{place.name}</h3>
+
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-600">
                 <MapPin size={13} />
-                {restaurant.district}
+                {place.district}
               </p>
-              <p className="mt-1 text-sm text-slate-500">평균 {restaurant.rating.toFixed(1)} · {restaurant.priceBand}</p>
+
+              <p className="mt-1 text-xs text-slate-500">평균 {place.rating.toFixed(1)} · {place.priceBand}</p>
 
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {restaurant.tags.slice(0, 3).map((tag) => (
-                  <span key={tag} className="rounded-full bg-white/70 px-2 py-1 text-xs text-slate-600">
+                {place.tags.slice(0, 3).map((tag) => (
+                  <span key={tag} className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-slate-600">
                     {tag}
                   </span>
                 ))}
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-xs text-slate-600">
+              <div className="mt-3 flex items-center justify-between text-[11px] text-slate-600">
                 <span className="inline-flex items-center gap-1">
-                  <Utensils size={12} />
-                  대표메뉴 {restaurant.signature}
+                  <UtensilsCrossed size={12} />
+                  {place.signature}
                 </span>
-                <span>리뷰 {visibleReviews}개</span>
               </div>
             </motion.button>
           );

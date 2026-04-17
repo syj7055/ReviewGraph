@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Clock3, Link2, ListChecks, Sparkles } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import FilterPills from "./components/FilterPills";
 import LoadingScene from "./components/LoadingScene";
 import GroupAView from "./components/views/GroupAView";
@@ -10,12 +10,13 @@ import EntryScreen from "./components/flow/EntryScreen";
 import RestaurantGrid from "./components/flow/RestaurantGrid";
 import SurveyModal from "./components/flow/SurveyModal";
 import LogScreen from "./components/flow/LogScreen";
-import { FILTER_PILLS, MOCK_GRAPH_BY_RESTAURANT, MOCK_RESTAURANTS, MOCK_REVIEWS } from "./data/mockReviews";
+import { FILTER_PILLS, MOCK_GRAPH_BY_PLACE, MOCK_PLACES, MOCK_REVIEWS } from "./data/mockReviews";
 
 const GROUP_CODES = ["A", "B", "C"];
 const GROUP_QUERY_KEY = "group";
-const DEFAULT_FILTERS = ["가족모임", "주차가능"];
+const DEFAULT_FILTERS = [];
 const EMPTY_GRAPH = { nodes: [], links: [] };
+const MAX_VISIBLE_REVIEWS = 20;
 const DEFAULT_SURVEY = {
   helpfulnessLikert: 4,
   visitIntentPercent: 70,
@@ -65,8 +66,8 @@ const makeSessionLog = (groupCode) => ({
   createdAt: nowIso(),
   serviceStartedAt: null,
   serviceCompletedAt: null,
-  finalRestaurantId: null,
-  finalRestaurantName: null,
+  finalPlaceId: null,
+  finalPlaceName: null,
   survey: null,
   metrics: {
     taskCompletionMs: 0,
@@ -74,7 +75,7 @@ const makeSessionLog = (groupCode) => ({
     totalScrollDistancePx: 0,
     maxScrollY: 0,
     filterToggleCount: 0,
-    restaurantSelectionCount: 0,
+    placeSelectionCount: 0,
     totalReviewClicks: 0,
     top3: {
       impressionBatches: 0,
@@ -112,14 +113,14 @@ const buildLogExport = (sessionLog) => {
   const summary = {
     sessionId: sessionLog.sessionId,
     groupCode: sessionLog.groupCode,
-    finalRestaurant: sessionLog.finalRestaurantName,
+    finalPlace: sessionLog.finalPlaceName,
     taskCompletionSec: Number((sessionLog.metrics.taskCompletionMs / 1000).toFixed(2)),
     top3CtrPercent: Number((top3Ctr * 100).toFixed(2)),
     top3AvgDwellSec: Number((top3AvgDwellMs / 1000).toFixed(2)),
     scrollEvents: sessionLog.metrics.scrollEvents,
     totalScrollDistancePx: Math.round(sessionLog.metrics.totalScrollDistancePx),
     filterToggleCount: sessionLog.metrics.filterToggleCount,
-    restaurantSelectionCount: sessionLog.metrics.restaurantSelectionCount,
+    placeSelectionCount: sessionLog.metrics.placeSelectionCount,
   };
 
   const payload = {
@@ -131,14 +132,14 @@ const buildLogExport = (sessionLog) => {
     "=== ReviewGraph Session Log ===",
     `sessionId: ${summary.sessionId}`,
     `groupCode: ${summary.groupCode}`,
-    `finalRestaurant: ${summary.finalRestaurant}`,
+    `finalPlace: ${summary.finalPlace}`,
     `taskCompletionSec: ${summary.taskCompletionSec}`,
     `top3CtrPercent: ${summary.top3CtrPercent}`,
     `top3AvgDwellSec: ${summary.top3AvgDwellSec}`,
     `scrollEvents: ${summary.scrollEvents}`,
     `totalScrollDistancePx: ${summary.totalScrollDistancePx}`,
     `filterToggleCount: ${summary.filterToggleCount}`,
-    `restaurantSelectionCount: ${summary.restaurantSelectionCount}`,
+    `placeSelectionCount: ${summary.placeSelectionCount}`,
     "",
     "=== JSON ===",
     JSON.stringify(payload, null, 2),
@@ -150,20 +151,46 @@ const buildLogExport = (sessionLog) => {
   };
 };
 
+const rankPlaceReviews = (reviews, preferences, groupCode) => {
+  const preferenceSet = new Set(preferences);
+
+  return reviews
+    .map((review) => {
+      const matchedCount = review.visitTags.filter((tag) => preferenceSet.has(tag)).length;
+      const mismatchCount = Math.max(0, preferences.length - matchedCount);
+      const preferenceBoost = preferences.length > 0 ? matchedCount * 1200 : 0;
+      const mismatchPenalty = preferences.length > 0 ? mismatchCount * 14 : 0;
+      const groupWeight = groupCode === "B" ? review.helpfulnessScore * 14 : review.helpfulnessScore * 10;
+      const rankScore = preferenceBoost + groupWeight + review.centrality * 90 - mismatchPenalty;
+
+      return {
+        review,
+        rankScore,
+      };
+    })
+    .sort((a, b) => {
+      if (b.rankScore !== a.rankScore) {
+        return b.rankScore - a.rankScore;
+      }
+      return b.review.helpfulnessScore - a.review.helpfulnessScore;
+    })
+    .slice(0, MAX_VISIBLE_REVIEWS)
+    .map((item) => item.review);
+};
+
 function App() {
   const initialGroupRef = useRef(parseGroupFromUrl());
   const [groupCode, setGroupCode] = useState(initialGroupRef.current);
   const [phase, setPhase] = useState(initialGroupRef.current ? "service" : "entry");
 
-  const [selectedFilters, setSelectedFilters] = useState(DEFAULT_FILTERS);
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
+  const [selectedPreferences, setSelectedPreferences] = useState(DEFAULT_FILTERS);
+  const [selectedPlaceId, setSelectedPlaceId] = useState(null);
   const [selectedReviewId, setSelectedReviewId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSurvey, setShowSurvey] = useState(false);
   const [survey, setSurvey] = useState(DEFAULT_SURVEY);
   const [logSummary, setLogSummary] = useState(null);
   const [logText, setLogText] = useState("");
-  const [linkCopied, setLinkCopied] = useState(false);
 
   const serviceStartTsRef = useRef(0);
   const activeReviewRef = useRef(null);
@@ -171,15 +198,14 @@ function App() {
   const sessionLogRef = useRef(makeSessionLog(initialGroupRef.current || "A"));
 
   const resetServiceState = useCallback((nextGroupCode) => {
-    setSelectedFilters(DEFAULT_FILTERS);
-    setSelectedRestaurantId(null);
+    setSelectedPreferences(DEFAULT_FILTERS);
+    setSelectedPlaceId(null);
     setSelectedReviewId(null);
     setIsLoading(false);
     setShowSurvey(false);
     setSurvey(DEFAULT_SURVEY);
     setLogSummary(null);
     setLogText("");
-    setLinkCopied(false);
 
     serviceStartTsRef.current = 0;
     activeReviewRef.current = null;
@@ -212,44 +238,38 @@ function App() {
   }, []);
 
   const reviewCountMap = useMemo(() => {
-    const map = Object.fromEntries(MOCK_RESTAURANTS.map((restaurant) => [restaurant.id, 0]));
+    const map = Object.fromEntries(MOCK_PLACES.map((place) => [place.id, { ranked: 0, total: 0 }]));
 
     MOCK_REVIEWS.forEach((review) => {
-      const filterMatch =
-        selectedFilters.length === 0 || selectedFilters.some((filter) => review.visitTags.includes(filter));
-
-      if (filterMatch) {
-        map[review.restaurantId] = (map[review.restaurantId] || 0) + 1;
+      if (!map[review.placeId]) {
+        return;
       }
+      map[review.placeId].total += 1;
+    });
+
+    Object.keys(map).forEach((placeId) => {
+      map[placeId].ranked = Math.min(MAX_VISIBLE_REVIEWS, map[placeId].total);
     });
 
     return map;
-  }, [selectedFilters]);
+  }, []);
 
-  const restaurantReviews = useMemo(() => {
-    if (!selectedRestaurantId) {
+  const placeReviews = useMemo(() => {
+    if (!selectedPlaceId) {
       return [];
     }
 
-    const scoped = MOCK_REVIEWS.filter((review) => review.restaurantId === selectedRestaurantId);
-    const filtered = scoped.filter(
-      (review) => selectedFilters.length === 0 || selectedFilters.some((filter) => review.visitTags.includes(filter))
-    );
+    const scoped = MOCK_REVIEWS.filter((review) => review.placeId === selectedPlaceId);
+    return rankPlaceReviews(scoped, selectedPreferences, groupCode);
+  }, [groupCode, selectedPlaceId, selectedPreferences]);
 
-    if (groupCode === "B") {
-      return filtered.slice().sort((a, b) => b.helpfulnessScore - a.helpfulnessScore);
-    }
-
-    return filtered;
-  }, [groupCode, selectedFilters, selectedRestaurantId]);
-
-  const graphDataForRestaurant = useMemo(() => {
-    if (!selectedRestaurantId) {
+  const graphDataForPlace = useMemo(() => {
+    if (!selectedPlaceId) {
       return EMPTY_GRAPH;
     }
 
-    const baseGraph = MOCK_GRAPH_BY_RESTAURANT[selectedRestaurantId] || EMPTY_GRAPH;
-    const visibleReviewIds = new Set(restaurantReviews.map((review) => review.id));
+    const baseGraph = MOCK_GRAPH_BY_PLACE[selectedPlaceId] || EMPTY_GRAPH;
+    const visibleReviewIds = new Set(placeReviews.map((review) => review.id));
 
     return {
       nodes: baseGraph.nodes.filter((node) => visibleReviewIds.has(node.id)),
@@ -259,14 +279,14 @@ function App() {
         return visibleReviewIds.has(sourceId) && visibleReviewIds.has(targetId);
       }),
     };
-  }, [restaurantReviews, selectedRestaurantId]);
+  }, [placeReviews, selectedPlaceId]);
 
-  const selectedRestaurant = useMemo(
-    () => MOCK_RESTAURANTS.find((restaurant) => restaurant.id === selectedRestaurantId) || null,
-    [selectedRestaurantId]
+  const selectedPlace = useMemo(
+    () => MOCK_PLACES.find((place) => place.id === selectedPlaceId) || null,
+    [selectedPlaceId]
   );
 
-  const top3ReviewIds = useMemo(() => restaurantReviews.slice(0, 3).map((review) => review.id), [restaurantReviews]);
+  const top3ReviewIds = useMemo(() => placeReviews.slice(0, 3).map((review) => review.id), [placeReviews]);
 
   useEffect(() => {
     topThreeIdsRef.current = top3ReviewIds;
@@ -337,7 +357,7 @@ function App() {
   }, [resetServiceState]);
 
   useEffect(() => {
-    if (phase !== "service" || !selectedRestaurantId) {
+    if (phase !== "service" || !selectedPlaceId) {
       return;
     }
 
@@ -349,23 +369,23 @@ function App() {
     }, 800);
 
     return () => window.clearTimeout(timer);
-  }, [groupCode, phase, selectedRestaurantId, selectedFilters]);
+  }, [groupCode, phase, selectedPlaceId, selectedPreferences]);
 
   useEffect(() => {
-    if (isLoading || restaurantReviews.length === 0) {
+    if (isLoading || placeReviews.length === 0) {
       return;
     }
 
     setSelectedReviewId((prev) => {
-      if (prev && restaurantReviews.some((review) => review.id === prev)) {
+      if (prev && placeReviews.some((review) => review.id === prev)) {
         return prev;
       }
-      return restaurantReviews[0].id;
+      return placeReviews[0].id;
     });
-  }, [isLoading, restaurantReviews]);
+  }, [isLoading, placeReviews]);
 
   useEffect(() => {
-    if (phase !== "service" || isLoading || !selectedRestaurantId || top3ReviewIds.length === 0) {
+    if (phase !== "service" || isLoading || !selectedPlaceId || top3ReviewIds.length === 0) {
       return;
     }
 
@@ -382,10 +402,10 @@ function App() {
     sessionLogRef.current.timeline.push({
       at: nowIso(),
       event: "top3_impression",
-      restaurantId: selectedRestaurantId,
+      placeId: selectedPlaceId,
       reviewIds: top3ReviewIds,
     });
-  }, [isLoading, phase, selectedRestaurantId, top3ReviewIds]);
+  }, [isLoading, phase, selectedPlaceId, top3ReviewIds]);
 
   const handleSelectMode = (nextGroupCode) => {
     pushGroupToUrl(nextGroupCode);
@@ -395,32 +415,32 @@ function App() {
   };
 
   const handleToggleFilter = (filter) => {
-    closeActiveReview("filter_changed");
-    setSelectedFilters((prev) => toggleFilter(prev, filter));
+    closeActiveReview("preference_changed");
+    setSelectedPreferences((prev) => toggleFilter(prev, filter));
 
     const log = sessionLogRef.current;
     log.metrics.filterToggleCount += 1;
     log.timeline.push({
       at: nowIso(),
-      event: "filter_toggled",
+      event: "preference_toggled",
       filter,
     });
   };
 
-  const handleSelectRestaurant = (restaurantId) => {
-    if (restaurantId === selectedRestaurantId) {
+  const handleSelectPlace = (placeId) => {
+    if (placeId === selectedPlaceId) {
       return;
     }
 
-    closeActiveReview("restaurant_changed");
-    setSelectedRestaurantId(restaurantId);
+    closeActiveReview("place_changed");
+    setSelectedPlaceId(placeId);
 
     const log = sessionLogRef.current;
-    log.metrics.restaurantSelectionCount += 1;
+    log.metrics.placeSelectionCount += 1;
     log.timeline.push({
       at: nowIso(),
-      event: "restaurant_selected",
-      restaurantId,
+      event: "place_selected",
+      placeId,
     });
   };
 
@@ -461,8 +481,8 @@ function App() {
     [closeActiveReview]
   );
 
-  const handleFinalizeRestaurant = () => {
-    if (!selectedRestaurant || isLoading) {
+  const handleFinalizePlace = () => {
+    if (!selectedPlace || isLoading) {
       return;
     }
 
@@ -470,15 +490,15 @@ function App() {
 
     const log = sessionLogRef.current;
     log.serviceCompletedAt = nowIso();
-    log.finalRestaurantId = selectedRestaurant.id;
-    log.finalRestaurantName = selectedRestaurant.name;
+    log.finalPlaceId = selectedPlace.id;
+    log.finalPlaceName = selectedPlace.name;
     log.metrics.taskCompletionMs = serviceStartTsRef.current
       ? Math.max(0, Math.round(performance.now() - serviceStartTsRef.current))
       : 0;
     log.timeline.push({
       at: nowIso(),
-      event: "restaurant_confirmed",
-      restaurantId: selectedRestaurant.id,
+      event: "place_confirmed",
+      placeId: selectedPlace.id,
     });
 
     setShowSurvey(true);
@@ -514,23 +534,6 @@ function App() {
     setPhase("entry");
   };
 
-  const handleCopyLink = async () => {
-    if (!groupCode) {
-      return;
-    }
-
-    const url = new URL(window.location.href);
-    url.searchParams.set(GROUP_QUERY_KEY, groupCode.toLowerCase());
-
-    try {
-      await navigator.clipboard.writeText(url.toString());
-      setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 1200);
-    } catch {
-      setLinkCopied(false);
-    }
-  };
-
   if (phase === "entry") {
     return <EntryScreen onSelectMode={handleSelectMode} />;
   }
@@ -540,141 +543,94 @@ function App() {
   }
 
   return (
-    <main className="relative mx-auto min-h-screen w-full max-w-[1460px] px-4 pb-10 pt-10 sm:px-8">
-      <motion.header
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
-        className="mb-6"
-      >
-        <div className="glass-card rounded-[2rem] p-5 soft-shadow sm:p-7">
-          <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-            <div>
-              <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-orange-800">
-                <Sparkles size={13} />
-                ReviewGraph
-              </p>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">실사용자 중심 리뷰 큐레이션</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">
-                식당을 먼저 고르고, 리뷰를 통해 최종 방문 결정을 내릴 수 있는 서비스 화면입니다.
-                접속 코드별 링크를 그대로 참가자에게 전달해 동일 조건으로 비교할 수 있습니다.
-              </p>
-            </div>
+    <main className="mx-auto min-h-screen w-full max-w-[1480px] px-4 pb-10 pt-6 sm:px-8">
+      <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <FilterPills
+            filters={FILTER_PILLS}
+            selectedFilters={selectedPreferences}
+            onToggleFilter={handleToggleFilter}
+          />
 
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="glass-panel rounded-2xl p-4">
-                <p className="mb-1 text-xs font-medium uppercase tracking-[0.15em] text-slate-500">접속 코드</p>
-                <p className="text-2xl font-semibold text-slate-900">{groupCode}</p>
+          <RestaurantGrid
+            places={MOCK_PLACES}
+            selectedPlaceId={selectedPlaceId}
+            selectedPreferences={selectedPreferences}
+            onSelectPlace={handleSelectPlace}
+            reviewCountMap={reviewCountMap}
+          />
+        </aside>
+
+        <section className="space-y-4">
+          <div className="glass-card rounded-3xl p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Code {groupCode} · Top {MAX_VISIBLE_REVIEWS}</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                  {selectedPlace ? `${selectedPlace.name} 리뷰` : "Place를 선택하면 추천 리뷰가 표시됩니다"}
+                </h2>
+                {selectedPlace && (
+                  <p className="mt-1 text-sm text-slate-600">선호 키워드 우선순위 + 유용성 점수 기반으로 상위 {placeReviews.length}개를 노출합니다.</p>
+                )}
               </div>
-              <div className="glass-panel rounded-2xl p-4">
-                <p className="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
-                  <ListChecks size={13} />
-                  선택한 식당
-                </p>
-                <p className="text-base font-semibold text-slate-900">{selectedRestaurant?.name || "아직 선택 전"}</p>
-              </div>
-              <div className="glass-panel rounded-2xl p-4">
-                <p className="mb-2 flex items-center gap-1 text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
-                  <Link2 size={13} />
-                  참여 링크
-                </p>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600"
-                >
-                  {linkCopied ? "복사 완료" : "현재 URL 복사"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.header>
 
-      <section className="mb-6">
-        <FilterPills
-          filters={FILTER_PILLS}
-          selectedFilters={selectedFilters}
-          onToggleFilter={handleToggleFilter}
-        />
-      </section>
-
-      <section className="mb-6">
-        <RestaurantGrid
-          restaurants={MOCK_RESTAURANTS}
-          selectedRestaurantId={selectedRestaurantId}
-          selectedFilters={selectedFilters}
-          onSelectRestaurant={handleSelectRestaurant}
-          reviewCountMap={reviewCountMap}
-        />
-      </section>
-
-      <section className="space-y-4">
-        <div className="glass-card rounded-3xl p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">Review Feed</p>
-              <h2 className="text-2xl font-semibold text-slate-900">
-                {selectedRestaurant ? `${selectedRestaurant.name} 리뷰` : "식당을 선택하면 리뷰가 표시됩니다"}
-              </h2>
-              {selectedRestaurant && (
-                <p className="mt-1 text-sm text-slate-600">대표 메뉴: {selectedRestaurant.signature} · 리뷰 {restaurantReviews.length}건</p>
-              )}
-            </div>
-
-            <button
-              type="button"
-              disabled={!selectedRestaurant || isLoading}
-              onClick={handleFinalizeRestaurant}
-              className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              <Clock3 size={14} />
-              이 식당으로 최종 결정
-            </button>
-          </div>
-        </div>
-
-        {!selectedRestaurant ? (
-          <div className="glass-card rounded-2xl p-10 text-center text-slate-500">위 식당 리스트에서 한 곳을 먼저 선택해 주세요.</div>
-        ) : (
-          <AnimatePresence mode="wait">
-            {isLoading ? (
-              <LoadingScene key={`loading-${selectedRestaurantId}-${selectedFilters.join("|")}-${groupCode}`} message="필터 조건을 반영해 리뷰를 다시 준비하고 있습니다" />
-            ) : (
-              <motion.div
-                key={`view-${groupCode}-${selectedRestaurantId}`}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.24, ease: "easeOut" }}
+              <button
+                type="button"
+                disabled={!selectedPlace || isLoading}
+                onClick={handleFinalizePlace}
+                className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {groupCode === "A" && (
-                  <GroupAView
-                    reviews={restaurantReviews}
-                    selectedReviewId={selectedReviewId}
-                    onReviewOpen={handleReviewOpen}
-                  />
-                )}
-                {groupCode === "B" && (
-                  <GroupBView
-                    reviews={restaurantReviews}
-                    selectedReviewId={selectedReviewId}
-                    onReviewOpen={handleReviewOpen}
-                  />
-                )}
-                {groupCode === "C" && (
-                  <GroupCView
-                    reviews={restaurantReviews}
-                    graphData={graphDataForRestaurant}
-                    selectedReviewId={selectedReviewId}
-                    onReviewOpen={handleReviewOpen}
-                  />
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
-      </section>
+                <Clock3 size={14} />
+                이 Place로 최종 결정
+              </button>
+            </div>
+          </div>
+
+          {!selectedPlace ? (
+            <div className="glass-card rounded-2xl p-10 text-center text-slate-500">왼쪽 사이드바에서 Place를 선택해 주세요.</div>
+          ) : (
+            <AnimatePresence mode="wait">
+              {isLoading ? (
+                <LoadingScene
+                  key={`loading-${selectedPlaceId}-${selectedPreferences.join("|")}-${groupCode}`}
+                  message="선호 키워드를 반영해 상위 리뷰를 다시 정렬하고 있습니다"
+                />
+              ) : (
+                <motion.div
+                  key={`view-${groupCode}-${selectedPlaceId}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                >
+                  {groupCode === "A" && (
+                    <GroupAView
+                      reviews={placeReviews}
+                      selectedReviewId={selectedReviewId}
+                      onReviewOpen={handleReviewOpen}
+                    />
+                  )}
+                  {groupCode === "B" && (
+                    <GroupBView
+                      reviews={placeReviews}
+                      selectedReviewId={selectedReviewId}
+                      onReviewOpen={handleReviewOpen}
+                    />
+                  )}
+                  {groupCode === "C" && (
+                    <GroupCView
+                      reviews={placeReviews}
+                      graphData={graphDataForPlace}
+                      selectedReviewId={selectedReviewId}
+                      onReviewOpen={handleReviewOpen}
+                    />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+        </section>
+      </div>
 
       {showSurvey && (
         <SurveyModal

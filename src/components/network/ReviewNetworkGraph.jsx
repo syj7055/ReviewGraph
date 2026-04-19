@@ -209,11 +209,15 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
     fgRef.current.d3ReheatSimulation();
 
     const fitTimer = window.setTimeout(() => {
-      fgRef.current.zoomToFit(760, 92);
-    }, 260);
+      fgRef.current?.zoomToFit(900, 170);
+    }, 420);
+    const refitTimer = window.setTimeout(() => {
+      fgRef.current?.zoomToFit(620, 185);
+    }, 1200);
 
     return () => {
       window.clearTimeout(fitTimer);
+      window.clearTimeout(refitTimer);
       fgRef.current?.d3Force("semantic-cluster", null);
       fgRef.current?.d3Force("bridge-center", null);
       fgRef.current?.d3Force("collision", null);
@@ -284,6 +288,7 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
   const activeFocusNodeIds = selectedFocusIds || hoverContext?.focusNodeIds || null;
   const dimByFocus = Boolean(activeFocusNodeIds);
   const hoveredClusterKeyword = hoverContext?.mode === "cluster" ? hoverContext.keyword : null;
+  const focusedNodeId = selectedReviewId || hoveredNodeId || null;
 
   return (
     <div ref={containerRef} className="network-canvas relative h-[660px] overflow-hidden rounded-3xl">
@@ -306,16 +311,11 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
           const sourceId = getNodeId(link.source);
           const targetId = getNodeId(link.target);
           const baseWidth = 1.25 + clamp01(Number(link.weight || 0)) * 3.2;
-          const isSelectedLink = sourceId === selectedReviewId || targetId === selectedReviewId;
-          const inFocus =
-            activeFocusNodeIds &&
-            (activeFocusNodeIds.has(sourceId) || activeFocusNodeIds.has(targetId));
+          const isDirectFocusedLink =
+            focusedNodeId && (sourceId === focusedNodeId || targetId === focusedNodeId);
 
-          if (isSelectedLink) {
-            return baseWidth + 1.6;
-          }
-          if (inFocus) {
-            return baseWidth + 0.8;
+          if (isDirectFocusedLink) {
+            return baseWidth + 0.65;
           }
           if (dimByFocus) {
             return Math.max(0.42, baseWidth * 0.34);
@@ -325,17 +325,10 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
         linkColor={(link) => {
           const sourceId = getNodeId(link.source);
           const targetId = getNodeId(link.target);
-          const isSelectedLink = sourceId === selectedReviewId || targetId === selectedReviewId;
-          if (isSelectedLink) {
-            return "rgba(15, 23, 42, 0.96)";
-          }
-          const inFocus =
-            activeFocusNodeIds &&
-            activeFocusNodeIds.has(sourceId) &&
-            activeFocusNodeIds.has(targetId);
-
-          if (inFocus) {
-            return "rgba(51, 65, 85, 0.86)";
+          const isDirectFocusedLink =
+            focusedNodeId && (sourceId === focusedNodeId || targetId === focusedNodeId);
+          if (isDirectFocusedLink) {
+            return "rgba(51, 65, 85, 0.84)";
           }
           if (dimByFocus) {
             return "rgba(203, 213, 225, 0.4)";

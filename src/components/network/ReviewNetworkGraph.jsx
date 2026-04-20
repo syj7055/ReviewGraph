@@ -10,6 +10,10 @@ const FOCUS_LAYOUT = [
   { x: 0, y: 220 },
 ];
 
+const MAX_NODE_DISTANCE_FROM_CENTER = 430;
+const INITIAL_FIT_PADDING = 108;
+const REFIT_PADDING = 120;
+
 const colorFromScale = (value, alpha = 1) => {
   const v = clamp01(value);
   const red = Math.round(59 + (239 - 59) * v);
@@ -100,6 +104,42 @@ const createCollisionForce = () => {
         b.vy += pushY;
       }
     }
+  };
+
+  force.initialize = (nextNodes) => {
+    nodes = nextNodes || [];
+  };
+
+  return force;
+};
+
+const createRadialBoundsForce = (maxDistance = MAX_NODE_DISTANCE_FROM_CENTER) => {
+  let nodes = [];
+  const safeMax = Math.max(120, Number(maxDistance) || MAX_NODE_DISTANCE_FROM_CENTER);
+  const maxDistanceSq = safeMax * safeMax;
+
+  const force = () => {
+    nodes.forEach((node) => {
+      if (!node) {
+        return;
+      }
+
+      const x = Number.isFinite(node.x) ? node.x : 0;
+      const y = Number.isFinite(node.y) ? node.y : 0;
+      const distanceSq = x * x + y * y;
+
+      if (distanceSq <= maxDistanceSq) {
+        return;
+      }
+
+      const distance = Math.sqrt(distanceSq) || 1;
+      const ratio = safeMax / distance;
+      node.x = x * ratio;
+      node.y = y * ratio;
+
+      node.vx = (Number.isFinite(node.vx) ? node.vx : 0) * 0.52;
+      node.vy = (Number.isFinite(node.vy) ? node.vy : 0) * 0.52;
+    });
   };
 
   force.initialize = (nextNodes) => {
@@ -206,13 +246,14 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
     fgRef.current.d3Force("semantic-cluster", createSemanticClusterForce(focusByKeyword));
     fgRef.current.d3Force("bridge-center", createBridgeCenterForce());
     fgRef.current.d3Force("collision", createCollisionForce());
+    fgRef.current.d3Force("radial-bounds", createRadialBoundsForce());
     fgRef.current.d3ReheatSimulation();
 
     const fitTimer = window.setTimeout(() => {
-      fgRef.current?.zoomToFit(760, 130);
+      fgRef.current?.zoomToFit(760, INITIAL_FIT_PADDING);
     }, 420);
     const refitTimer = window.setTimeout(() => {
-      fgRef.current?.zoomToFit(520, 145);
+      fgRef.current?.zoomToFit(520, REFIT_PADDING);
     }, 1200);
 
     return () => {
@@ -221,6 +262,7 @@ function ReviewNetworkGraph({ graphData, selectedReviewId, onSelectReviewId }) {
       fgRef.current?.d3Force("semantic-cluster", null);
       fgRef.current?.d3Force("bridge-center", null);
       fgRef.current?.d3Force("collision", null);
+      fgRef.current?.d3Force("radial-bounds", null);
     };
   }, [focusByKeyword, graphData]);
 
